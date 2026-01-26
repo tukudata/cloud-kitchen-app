@@ -1,10 +1,13 @@
 use axum::response::Html;
 use axum::{Json, extract::State};
 use std::sync::{Arc, Mutex};
+use serde_json::{json, Value};
+use crate::services::ai_service;
 
-// Kita panggil tipenya lengkap dengan alamatnya
+// Define tipe Db sebagai shared state
 pub type Db = Arc<Mutex<Vec<crate::models::item::MenuItem>>>;
 
+// Handler untuk daftar menu
 pub async fn list_menu(
     State(db): State<Db>,
 ) -> Json<Vec<crate::models::item::MenuItem>> {
@@ -12,6 +15,7 @@ pub async fn list_menu(
     Json(menu.clone())
 }
 
+// Handler untuk menambah menu baru
 pub async fn create_menu(
     State(db): State<Db>,
     Json(payload): Json<crate::models::item::MenuItem>,
@@ -22,55 +26,98 @@ pub async fn create_menu(
     Json(payload)
 }
 
+// Handler untuk render dashboard HTML
 pub async fn render_dashboard(State(db): State<Db>) -> Html<String> {
     let menu = db.lock().unwrap();
     
-    // Kita buat string HTML secara dinamis
     let mut rows = String::new();
     for item in menu.iter() {
         rows.push_str(&format!(
-            "<tr>
-                <td>{}</td>
-                <td>{}</td>
-                <td>Rp {}</td>
-                <td>{}</td>
+            "<tr class='border-b hover:bg-orange-50 transition-colors'>
+                <td class='px-6 py-4 font-medium text-gray-900'>#{}</td>
+                <td class='px-6 py-4 text-gray-700'>{}</td>
+                <td class='px-6 py-4 text-orange-600 font-bold'>Rp {}</td>
+                <td class='px-6 py-4'>
+                    <span class='px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 uppercase'>
+                        {}
+                    </span>
+                </td>
             </tr>",
             item.id, item.nama, item.harga, item.kategori
         ));
     }
 
     let html_content = format!(
-        "<html>
-            <head>
-                <title>Cloud Kitchen Dashboard</title>
-                <style>
-                    body {{ font-family: sans-serif; padding: 40px; background: #f4f4f4; }}
-                    table {{ width: 100%; border-collapse: collapse; background: white; }}
-                    th, td {{ padding: 12px; border: 1px solid #ddd; text-align: left; }}
-                    th {{ background: #ff5722; color: white; }}
-                    h1 {{ color: #333; }}
-                </style>
-            </head>
-            <body>
-                <h1>🍳 Cloud Kitchen Menu Dashboard</h1>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Nama Menu</th>
-                            <th>Harga</th>
-                            <th>Kategori</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {}
-                    </tbody>
-                </table>
-                <p><i>Refresh halaman untuk melihat update data terbaru.</i></p>
-            </body>
+        "<!DOCTYPE html>
+        <html lang='en'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <title>Cloud Kitchen Dashboard</title>
+            <script src='https://cdn.tailwindcss.com'></script>
+        </head>
+        <body class='bg-gray-50 min-h-screen p-8'>
+            <div class='max-w-5xl mx-auto'>
+                <header class='flex justify-between items-center mb-8'>
+                    <div>
+                        <h1 class='text-4xl font-extrabold text-gray-800 tracking-tight'>
+                            🍳 Cloud Kitchen <span class='text-orange-500'>Dashboard</span>
+                        </h1>
+                        <p class='text-gray-500 mt-2'>Manajemen menu restoran secara real-time.</p>
+                    </div>
+                    <div class='bg-white shadow-sm border rounded-lg p-4 text-center'>
+                        <span class='block text-2xl font-bold text-orange-500'>{}</span>
+                        <span class='text-xs text-gray-400 uppercase tracking-widest'>Total Menu</span>
+                    </div>
+                </header>
+
+                <div class='bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100'>
+                    <table class='w-full text-left border-collapse'>
+                        <thead class='bg-gray-800 text-white'>
+                            <tr>
+                                <th class='px-6 py-4 font-semibold uppercase text-sm'>ID</th>
+                                <th class='px-6 py-4 font-semibold uppercase text-sm'>Nama Menu</th>
+                                <th class='px-6 py-4 font-semibold uppercase text-sm'>Harga</th>
+                                <th class='px-6 py-4 font-semibold uppercase text-sm'>Kategori</th>
+                            </tr>
+                        </thead>
+                        <tbody class='divide-y divide-gray-100'>
+                            {}
+                        </tbody>
+                    </table>
+                </div>
+
+                <footer class='mt-6 text-center text-gray-400 text-sm'>
+                    <p>Auto-generated by Axum & Rust • Refresh untuk sinkronisasi data</p>
+                </footer>
+            </div>
+        </body>
         </html>",
+        menu.len(), // Menampilkan total menu di header
         rows
     );
 
     Html(html_content)
+}
+
+// Handler untuk input menu via AI
+pub async fn create_menu_by_ai(
+    State(db): State<Db>,
+    body: String, // Kita terima teks mentah
+) -> Json<Value> {
+    // 1. Tanya AI
+    let ai_response = ai_service::ask_ai_to_parse_menu(&body).await.unwrap();
+    
+    // 2. Ubah string dari AI menjadi object MenuItem
+    let raw_json: String = ai_response.as_str().unwrap_or("{}").to_string();
+    let new_item: crate::models::item::MenuItem = serde_json::from_str(&raw_json).unwrap();
+
+    // 3. Simpan ke "Database" RAM
+    let mut menu = db.lock().unwrap();
+    menu.push(new_item.clone());
+
+    Json(json!({
+        "status": "success",
+        "data_added": new_item
+    }))
 }
