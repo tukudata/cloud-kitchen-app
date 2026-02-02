@@ -15,8 +15,17 @@ where
 {
     let v = serde_json::Value::deserialize(deserializer)?;
     match v {
+        // If it's already a number, just return it
         serde_json::Value::Number(n) => Ok(n.as_f64().unwrap_or(0.0)),
-        serde_json::Value::String(s) => s.parse::<f64>().map_err(serde::de::Error::custom),
+        
+        // If it's a string (e.g., "8.000" or "Rp 8000")
+        serde_json::Value::String(s) => {
+            let clean_s: String = s.chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            
+            clean_s.parse::<f64>().map_err(serde::de::Error::custom)
+        },
         _ => Ok(0.0),
     }
 }
