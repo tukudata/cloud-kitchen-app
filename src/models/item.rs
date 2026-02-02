@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Deserializer};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MenuItem {
