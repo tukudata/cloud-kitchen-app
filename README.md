@@ -3,7 +3,7 @@
 A simple practice project to explore the **Rust** ecosystem. It uses **Axum** for the backend and **Ollama** for Local AI integration.
 
 ## 📸 Preview
-dashboard.png
+(dashboard.png)
 
 ## 🚀 Features
 * **AI Menu Parser:** Automatically converts raw text into menu data using `Llama 3.2`.
@@ -42,3 +42,4 @@ curl -X POST http://127.0.0.1:3000/api/menu/ai -d "Jus Alpukat 8000 kategori min
 ```
 
 The AI will parse your sentence and automatically add it to the dashboard!
+
